@@ -1,0 +1,20 @@
+# Bambu Labs Printer Configuration
+# Copy this file to config.yaml and fill in your printer details
+
+printers:
+  - name: "Main Printer"
+    ip: 192.168.1.XXX
+    serial: ACXXXXXXXXXX
+    access_code: XXXXXXXX
+    ping_user_id: null  # Discord user ID to ping when this printer finishes/fails/pauses (set to null to disable)
+
+  - name: "Second Printer"
+    ip: 192.168.1.YYY
+    serial: ACYYYYYYYYYY
+    access_code: YYYYYYYY
+    ping_user_id: "123456789012345678"  # Example: ping this user when this printer finishes/fails/pauses
+
+discord:
+  webhook_url: YOUR_DISCORD_WEBHOOK_URL_HERE
+  update_time_interval: 3600  # seconds between time-based updates (3600 = 1 hour)
+  update_percent_interval: 25  # send update every X percent (e.g., 25 = updates at 0%, 25%, 50%, 75%, 100%)
