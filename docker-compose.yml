@@ -1,0 +1,29 @@
+version: '3.8'
+
+services:
+  chibichonk:
+    image: ghcr.io/YOUR_USERNAME/chibichonk:latest
+    container_name: chibichonk
+    restart: unless-stopped
+
+    # Mount config from host
+    volumes:
+      - ./config.yaml:/app/config/config.yaml:ro
+
+    # Run as non-root user (optional but recommended)
+    # user: "1000:1000"
+
+    # Network mode host allows direct printer access
+    # Change to bridge if you prefer isolated networking
+    network_mode: host
+
+    # Environment variables (optional)
+    # environment:
+    #   - TZ=America/New_York
+
+    # Resource limits (optional)
+    # deploy:
+    #   resources:
+    #     limits:
+    #       cpus: '0.5'
+    #       memory: 256M

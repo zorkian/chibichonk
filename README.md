@@ -68,6 +68,34 @@ printers:
 
 ## Running the Monitor
 
+### Option 1: Docker (Recommended for NAS/Server)
+
+1. Create your `config.yaml` in the same directory as `docker-compose.yml`
+
+2. Update the image name in `docker-compose.yml` to match your GitHub username:
+   ```yaml
+   image: ghcr.io/YOUR_USERNAME/chibichonk:latest
+   ```
+
+3. Start the container:
+   ```bash
+   docker-compose up -d
+   ```
+
+4. View logs:
+   ```bash
+   docker-compose logs -f
+   ```
+
+5. Stop the container:
+   ```bash
+   docker-compose down
+   ```
+
+The container will automatically restart if it crashes or when the system reboots.
+
+### Option 2: Direct Python
+
 Run the monitoring script:
 ```bash
 python chibichonk.py
@@ -134,8 +162,42 @@ The bot sends rich embed messages with:
 
 ## Requirements
 
-- Python 3.10 or higher
+- Python 3.10 or higher (for local setup)
+- Docker (for containerized deployment)
 - Bambu Labs printer with LAN mode enabled (LAN Only Mode is NOT required)
+
+## Deployment to Synology NAS
+
+1. **Enable SSH** on your Synology NAS (Control Panel > Terminal & SNMP > Enable SSH)
+
+2. **Install Container Manager** (formerly Docker) from Package Center
+
+3. **SSH into your NAS** and create a directory:
+   ```bash
+   mkdir -p /volume1/docker/chibichonk
+   cd /volume1/docker/chibichonk
+   ```
+
+4. **Copy your `config.yaml`** to this directory
+
+5. **Create `docker-compose.yml`**:
+   ```bash
+   wget https://raw.githubusercontent.com/YOUR_USERNAME/chibichonk/main/docker-compose.yml
+   ```
+
+   Or copy the file manually and update the image name to match your GitHub username.
+
+6. **Start the container**:
+   ```bash
+   docker-compose up -d
+   ```
+
+7. **View logs**:
+   ```bash
+   docker-compose logs -f chibichonk
+   ```
+
+The container will automatically start when your NAS boots up.
 
 ## License
 

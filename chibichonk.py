@@ -18,7 +18,13 @@ import bambulabs_api as bl
 import threading
 
 # Load configuration from config.yaml
-with open('config.yaml', 'r') as f:
+# Support both local and Docker mounted config
+import os
+config_path = os.getenv('CONFIG_PATH', 'config.yaml')
+if not os.path.exists(config_path) and os.path.exists('config/config.yaml'):
+    config_path = 'config/config.yaml'
+
+with open(config_path, 'r') as f:
     config = yaml.safe_load(f)
 
 # Get Discord details from config
