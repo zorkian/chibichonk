@@ -20,8 +20,8 @@ pip install -r requirements.txt
 
    **Discord settings:**
    - `webhook_url`: Your Discord webhook URL (see below)
-   - `update_time_interval`: Seconds between time-based updates (e.g., 3600 = 1 hour)
-   - `update_percent_interval`: Send update every X percent progress (e.g., 25 = updates at 0%, 25%, 50%, 75%, 100%)
+   - `update_time_interval`: Seconds between time-based updates (e.g., 3600 = 1 hour, set to `null` to disable)
+   - `update_percent_interval`: Send update every X percent progress (e.g., 25 = updates at 0%, 25%, 50%, 75%, 100%, set to `null` to disable)
 
 ## Creating a Discord Webhook
 
@@ -137,14 +137,11 @@ Each printer will:
 The bot sends rich embed messages with:
 - Printer name (in the title)
 - Printer status (IDLE, RUNNING, PAUSE, FINISH, etc.)
-- File name (what's being printed)
 - Bed temperature (current/target)
 - Nozzle temperature (current/target)
 - Print progress percentage
 - Current layer / total layers
 - Time remaining (formatted as hours and minutes)
-- Print speed
-- Fan speed
 
 **Color coding by status:**
 - 🟢 Green: RUNNING, PREPARE (actively printing)

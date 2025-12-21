@@ -172,14 +172,6 @@ def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=
             "inline": True
         })
 
-    # Filename (as code block to prevent markdown interpretation)
-    if data['filename']:
-        fields.append({
-            "name": "File",
-            "value": f"`{data['filename']}`",
-            "inline": False
-        })
-
     # Print progress
     if data['progress'] is not None:
         fields.append({
@@ -209,20 +201,6 @@ def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=
             "inline": True
         })
 
-    if data['print_speed'] is not None:
-        fields.append({
-            "name": "Print Speed",
-            "value": f"{data['print_speed']}%",
-            "inline": True
-        })
-
-    if data['fan_speed'] is not None:
-        fields.append({
-            "name": "Fan Speed",
-            "value": f"{data['fan_speed']}%",
-            "inline": True
-        })
-
     # Create embed
     embed = {
         "title": f"🖨️ {printer_name} - Status Change" if is_state_change else f"🖨️ {printer_name} - Update",
@@ -231,10 +209,29 @@ def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=
         "timestamp": datetime.utcnow().isoformat()
     }
 
-    # Check if we should ping a user (only on state changes to final states)
-    content = None
+    # Build message content that shows in notifications
+    content_parts = []
+
+    # Add ping for terminal states only
     if is_state_change and ping_user_id and status in ['FINISH', 'FAILED', 'PAUSE']:
-        content = f"<@{ping_user_id}>"
+        content_parts.append(f"<@{ping_user_id}>")
+
+    # Add descriptive message
+    if is_state_change:
+        if status:
+            content_parts.append(f"**{printer_name}** has transitioned to **{status}**")
+        else:
+            content_parts.append(f"**{printer_name}** status update")
+    else:
+        # Periodic update
+        if status and data['progress'] is not None:
+            content_parts.append(f"**{printer_name}** update - {status} at {data['progress']}%")
+        elif status:
+            content_parts.append(f"**{printer_name}** update - {status}")
+        else:
+            content_parts.append(f"**{printer_name}** update")
+
+    content = " ".join(content_parts) if content_parts else None
 
     payload = {
         "embeds": [embed]
@@ -336,7 +333,7 @@ def monitor_printer(printer_config, stop_event):
 
         last_update_time = time.time()
         last_progress = data['progress'] if data['progress'] is not None else 0
-        last_progress_milestone = (last_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
+        last_progress_milestone = (last_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL if UPDATE_PERCENT_INTERVAL else 0
 
         # Monitor loop
         while not stop_event.is_set():
@@ -353,17 +350,28 @@ def monitor_printer(printer_config, stop_event):
                 send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
                 last_status = current_status
                 last_update_time = current_time  # Reset update timer on state change
-                last_progress_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
+                if UPDATE_PERCENT_INTERVAL:
+                    last_progress_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
 
             else:
+                # Don't send periodic updates if printer is in a terminal/idle state
+                terminal_states = ['FINISH', 'FAILED', 'IDLE', 'PAUSE']
+                is_terminal = current_status in terminal_states
+
                 # Check if we should send a periodic update
                 time_passed = current_time - last_update_time >= UPDATE_TIME_INTERVAL
 
                 # Check if progress crossed a milestone (e.g., 0->25, 25->50, etc.)
-                current_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
-                progress_milestone_crossed = current_milestone > last_progress_milestone
+                # Only check if UPDATE_PERCENT_INTERVAL is configured (not None/null)
+                progress_milestone_crossed = False
+                if UPDATE_PERCENT_INTERVAL:
+                    current_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
+                    progress_milestone_crossed = current_milestone > last_progress_milestone
+                else:
+                    current_milestone = 0
 
-                if time_passed or progress_milestone_crossed:
+                # Only send periodic updates if printer is actively doing something
+                if not is_terminal and (time_passed or progress_milestone_crossed):
                     reason = []
                     if time_passed:
                         reason.append(f"time ({UPDATE_TIME_INTERVAL}s elapsed)")
@@ -373,7 +381,11 @@ def monitor_printer(printer_config, stop_event):
                     print(f"[{get_timestamp()}] [{printer_name}] Periodic update ({', '.join(reason)})")
                     send_discord_webhook(data, printer_name, ping_user_id, is_state_change=False)
                     last_update_time = current_time
-                    last_progress_milestone = current_milestone
+                    if UPDATE_PERCENT_INTERVAL:
+                        last_progress_milestone = current_milestone
+                elif is_terminal and time_passed:
+                    # Still update the timer so we don't spam logs
+                    last_update_time = current_time
 
     except Exception as e:
         print(f"[{get_timestamp()}] [{printer_name}] Error: {e}")

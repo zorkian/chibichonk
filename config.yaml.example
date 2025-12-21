@@ -16,5 +16,5 @@ printers:
 
 discord:
   webhook_url: YOUR_DISCORD_WEBHOOK_URL_HERE
-  update_time_interval: 3600  # seconds between time-based updates (3600 = 1 hour)
-  update_percent_interval: 25  # send update every X percent (e.g., 25 = updates at 0%, 25%, 50%, 75%, 100%)
+  update_time_interval: 3600  # seconds between time-based updates (3600 = 1 hour, set to null to disable)
+  update_percent_interval: 25  # send update every X percent (e.g., 25 = updates at 0%, 25%, 50%, 75%, 100%, set to null to disable)
