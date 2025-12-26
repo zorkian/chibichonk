@@ -2,24 +2,30 @@ version: '3.8'
 
 services:
   chibichonk:
-    image: ghcr.io/YOUR_USERNAME/chibichonk:latest
+    # Use pre-built image from GitHub Container Registry
+    image: ghcr.io/zorkian/chibichonk:latest
+
+    # Or build from local Dockerfile instead
+    # build: .
+    # image: chibichonk:latest
+
     container_name: chibichonk
     restart: unless-stopped
+    pull_policy: always
 
     # Mount config from host
+    # For Synology NAS, use absolute path like: /volume1/docker/chibichonk/config.yaml
     volumes:
-      - ./config.yaml:/app/config/config.yaml:ro
+      - /volume1/docker/chibichonk/config.yaml:/app/config/config.yaml:ro
 
-    # Run as non-root user (optional but recommended)
-    # user: "1000:1000"
-
-    # Network mode host allows direct printer access
-    # Change to bridge if you prefer isolated networking
+    # Network mode host allows direct printer access on local network
+    # This is required for MQTT connections to Bambu printers
     network_mode: host
 
     # Environment variables (optional)
-    # environment:
-    #   - TZ=America/New_York
+    environment:
+      - TZ=America/Los_Angeles
+      - CONFIG_PATH=/app/config/config.yaml
 
     # Resource limits (optional)
     # deploy:
