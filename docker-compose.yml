@@ -18,10 +18,6 @@ services:
     volumes:
       - /volume1/docker/chibichonk/config.yaml:/app/config/config.yaml:ro
 
-    # Network mode host allows direct printer access on local network
-    # This is required for MQTT connections to Bambu printers
-    network_mode: host
-
     # Environment variables (optional)
     environment:
       - TZ=America/Los_Angeles
