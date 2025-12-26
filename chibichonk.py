@@ -107,86 +107,62 @@ def get_printer_data(printer, printer_name=None, debug=False):
 
     return data
 
-def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=False):
+def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=False, waiting_for_data=False):
     """Send printer data to Discord webhook."""
     if WEBHOOK_URL == "YOUR_DISCORD_WEBHOOK_URL_HERE":
         return  # Skip if webhook not configured
 
-    # Skip if we have absolutely no useful data
-    if (data['status'] is None and data['bed_temp'] is None and
-        data['nozzle_temp'] is None and data['progress'] is None):
-        return  # No data to send
-
-    # Determine color based on printer state
     status = data['status']
-    if status in ['RUNNING', 'PREPARE']:
-        color = 0x00ff00  # Green - actively printing
+
+    # Detect if we have partial data (missing key fields)
+    has_partial_data = (
+        status is None or
+        data['progress'] is None or
+        data['current_layer'] is None or
+        data['remaining_time'] is None
+    )
+
+    # Get emoji based on printer state
+    if status in ['RUNNING']:
+        emoji = '🟢'  # Green circle - actively printing
     elif status in ['PAUSE']:
-        color = 0xffa500  # Orange - paused
+        emoji = '🟠'  # Orange circle - paused
     elif status in ['FAILED']:
-        color = 0xff0000  # Red - failed
+        emoji = '🔴'  # Red circle - failed
     elif status in ['FINISH']:
-        color = 0x3498db  # Blue - completed successfully
+        emoji = '🔵'  # Blue circle - completed successfully
     elif status in ['IDLE']:
-        color = 0x95a5a6  # Gray - idle
+        emoji = '⚪'  # White circle - idle
     else:
-        # Unknown or no status - use yellow/amber for partial data
-        color = 0xffbf00  # Amber - partial/unknown state
+        emoji = '🟡'  # Yellow circle - unknown/partial state
 
-    # Build embed fields
-    fields = []
+    # Build message content - single line format
+    # Format: (emoji) Printer Name - STATUS (progress%, Layer X/Y, time remaining) [- ping]
 
-    # Status field
-    if data['status']:
-        fields.append({
-            "name": "Status",
-            "value": data['status'],
-            "inline": True
-        })
-    elif data['bed_temp'] is not None or data['nozzle_temp'] is not None:
-        # If we have temps but no status, show "Active"
-        fields.append({
-            "name": "Status",
-            "value": "Active (partial data)",
-            "inline": True
-        })
+    # Build status line
+    if status:
+        status_text = f"{emoji} **{printer_name}** - {status}"
+    elif waiting_for_data or has_partial_data:
+        status_text = f"{emoji} **{printer_name}** - Waiting for data..."
+    else:
+        status_text = f"{emoji} **{printer_name}**"
 
-    # Temperature fields
-    if data['bed_temp'] is not None:
-        temp_text = f"{data['bed_temp']}°C"
-        if data['target_bed_temp'] is not None:
-            temp_text += f" / {data['target_bed_temp']}°C"
-        fields.append({
-            "name": "Bed Temperature",
-            "value": temp_text,
-            "inline": True
-        })
+    # Build progress information (with ? for missing data if we're in partial data mode)
+    info_parts = []
 
-    if data['nozzle_temp'] is not None:
-        temp_text = f"{data['nozzle_temp']}°C"
-        if data['target_nozzle_temp'] is not None:
-            temp_text += f" / {data['target_nozzle_temp']}°C"
-        fields.append({
-            "name": "Nozzle Temperature",
-            "value": temp_text,
-            "inline": True
-        })
-
-    # Print progress
+    # Progress percentage
     if data['progress'] is not None:
-        fields.append({
-            "name": "Progress",
-            "value": f"{data['progress']}%",
-            "inline": True
-        })
+        info_parts.append(f"{data['progress']}%")
+    elif waiting_for_data or has_partial_data:
+        info_parts.append(f"?%")
 
+    # Layer count
     if data['current_layer'] is not None and data['total_layers'] is not None:
-        fields.append({
-            "name": "Layer",
-            "value": f"{data['current_layer']} / {data['total_layers']}",
-            "inline": True
-        })
+        info_parts.append(f"layer {data['current_layer']}/{data['total_layers']}")
+    elif waiting_for_data or has_partial_data:
+        info_parts.append(f"layer ?/?")
 
+    # Time remaining
     if data['remaining_time'] is not None:
         # Convert minutes to hours and minutes for better readability
         hours = data['remaining_time'] // 60
@@ -195,50 +171,23 @@ def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=
             time_str = f"{hours}h {minutes}m"
         else:
             time_str = f"{minutes}m"
-        fields.append({
-            "name": "Time Remaining",
-            "value": time_str,
-            "inline": True
-        })
+        info_parts.append(f"{time_str} remaining")
+    elif waiting_for_data or has_partial_data:
+        info_parts.append(f"? remaining")
 
-    # Create embed
-    embed = {
-        "title": f"🖨️ {printer_name} - Status Change" if is_state_change else f"🖨️ {printer_name} - Update",
-        "color": color,
-        "fields": fields,
-        "timestamp": datetime.utcnow().isoformat()
-    }
-
-    # Build message content that shows in notifications
-    content_parts = []
-
-    # Add ping for terminal states only
-    if is_state_change and ping_user_id and status in ['FINISH', 'FAILED', 'PAUSE']:
-        content_parts.append(f"<@{ping_user_id}>")
-
-    # Add descriptive message
-    if is_state_change:
-        if status:
-            content_parts.append(f"**{printer_name}** has transitioned to **{status}**")
-        else:
-            content_parts.append(f"**{printer_name}** status update")
+    # Combine status and info
+    if info_parts:
+        content = f"{status_text} ({', '.join(info_parts)})"
     else:
-        # Periodic update
-        if status and data['progress'] is not None:
-            content_parts.append(f"**{printer_name}** update - {status} at {data['progress']}%")
-        elif status:
-            content_parts.append(f"**{printer_name}** update - {status}")
-        else:
-            content_parts.append(f"**{printer_name}** update")
+        content = status_text
 
-    content = " ".join(content_parts) if content_parts else None
+    # Add ping at the end for terminal states
+    if is_state_change and ping_user_id and status in ['FINISH', 'FAILED', 'PAUSE']:
+        content = f"{content} - <@{ping_user_id}>"
 
     payload = {
-        "embeds": [embed]
+        "content": content
     }
-
-    if content:
-        payload["content"] = content
 
     try:
         response = requests.post(WEBHOOK_URL, json=payload)
@@ -329,11 +278,28 @@ def monitor_printer(printer_config, stop_event):
         data = get_printer_data(printer, printer_name, debug=False)
         last_status = data['status']
         print_status_info(data, printer_name)
-        send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
+
+        # Send initial webhook to show bot is connected
+        # Skip only if status is PREPARE (but still send if partial data to show connection)
+        terminal_states = ['FINISH', 'FAILED', 'IDLE', 'PAUSE']
+        has_partial_data = (
+            data['status'] is None or
+            data['progress'] is None or
+            data['current_layer'] is None or
+            data['remaining_time'] is None
+        )
+
+        # Always send if we have partial data (to show we're waiting for more info)
+        # Or if we're in a terminal/running state
+        if has_partial_data:
+            send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True, waiting_for_data=True)
+        elif last_status in terminal_states or last_status == 'RUNNING':
+            send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
 
         last_update_time = time.time()
         last_progress = data['progress'] if data['progress'] is not None else 0
         last_progress_milestone = (last_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL if UPDATE_PERCENT_INTERVAL else 0
+        had_partial_data = has_partial_data  # Track if we started with partial data
 
         # Monitor loop
         while not stop_event.is_set():
@@ -344,18 +310,47 @@ def monitor_printer(printer_config, stop_event):
             current_status = data['status']
             current_progress = data['progress'] if data['progress'] is not None else 0
 
-            # Check if status changed
-            if current_status != last_status:
+            # Check if we now have complete data (for printers that start with partial data)
+            current_has_partial_data = (
+                data['status'] is None or
+                data['progress'] is None or
+                data['current_layer'] is None or
+                data['remaining_time'] is None
+            )
+
+            # Define terminal states that should trigger notifications
+            terminal_states = ['FINISH', 'FAILED', 'IDLE', 'PAUSE']
+
+            # If we had partial data but now have complete data, send an update
+            if had_partial_data and not current_has_partial_data and current_status == 'RUNNING':
+                print(f"[{get_timestamp()}] [{printer_name}] Received complete data")
                 print_status_info(data, printer_name)
                 send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
-                last_status = current_status
-                last_update_time = current_time  # Reset update timer on state change
+                last_update_time = current_time
                 if UPDATE_PERCENT_INTERVAL:
                     last_progress_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
+                had_partial_data = False  # Clear the flag
+                last_status = current_status
+
+            # Check if status changed
+            elif current_status != last_status:
+                # Only send notification if transitioning TO a terminal state
+                # Skip PREPARE state entirely
+                if current_status in terminal_states:
+                    print_status_info(data, printer_name)
+                    send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
+                    last_update_time = current_time  # Reset update timer on state change
+                    if UPDATE_PERCENT_INTERVAL:
+                        last_progress_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
+                else:
+                    # Log state change but don't send notification for PREPARE or other non-terminal states
+                    print(f"[{get_timestamp()}] [{printer_name}] Status changed to {current_status} (no notification)")
+
+                last_status = current_status
+                had_partial_data = current_has_partial_data  # Update partial data flag
 
             else:
                 # Don't send periodic updates if printer is in a terminal/idle state
-                terminal_states = ['FINISH', 'FAILED', 'IDLE', 'PAUSE']
                 is_terminal = current_status in terminal_states
 
                 # Check if we should send a periodic update
