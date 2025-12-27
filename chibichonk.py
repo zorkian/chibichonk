@@ -341,13 +341,13 @@ def monitor_printer(printer_config, stop_event):
                 # Send notification if:
                 # 1. Transitioning TO a terminal state (FINISH, FAILED, IDLE)
                 # 2. Transitioning TO or FROM PAUSE (pausing or resuming)
-                # 3. Transitioning FROM a terminal state to an active state (e.g., IDLE -> RUNNING)
-                # Skip PREPARE state entirely
+                # 3. Transitioning TO RUNNING from any non-active state (catches FINISH→PREPARE→RUNNING)
+                # Skip PREPARE state entirely when it's the destination
                 transitioning_to_terminal = current_status in terminal_states
                 transitioning_to_from_pause = (current_status == 'PAUSE' or last_status == 'PAUSE')
-                transitioning_from_terminal_to_active = (last_status in terminal_states and current_status in active_states)
+                starting_active_from_non_active = (current_status in active_states and last_status not in active_states)
 
-                if transitioning_to_terminal or transitioning_to_from_pause or transitioning_from_terminal_to_active:
+                if transitioning_to_terminal or transitioning_to_from_pause or starting_active_from_non_active:
                     print_status_info(data, printer_name)
                     send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
                     last_update_time = current_time  # Reset update timer on state change
