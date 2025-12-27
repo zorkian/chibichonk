@@ -181,7 +181,7 @@ def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=
     else:
         content = status_text
 
-    # Add ping at the end for terminal states
+    # Add ping at the end for terminal states and pause (states that need attention)
     if is_state_change and ping_user_id and status in ['FINISH', 'FAILED', 'PAUSE']:
         content = f"{content} - <@{ping_user_id}>"
 
@@ -281,7 +281,8 @@ def monitor_printer(printer_config, stop_event):
 
         # Send initial webhook to show bot is connected
         # Skip only if status is PREPARE (but still send if partial data to show connection)
-        terminal_states = ['FINISH', 'FAILED', 'IDLE', 'PAUSE']
+        terminal_states = ['FINISH', 'FAILED', 'IDLE']
+        active_states = ['RUNNING', 'PAUSE']
         has_partial_data = (
             data['status'] is None or
             data['progress'] is None or
@@ -290,10 +291,10 @@ def monitor_printer(printer_config, stop_event):
         )
 
         # Always send if we have partial data (to show we're waiting for more info)
-        # Or if we're in a terminal/running state
+        # Or if we're in a terminal or active state
         if has_partial_data:
             send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True, waiting_for_data=True)
-        elif last_status in terminal_states or last_status == 'RUNNING':
+        elif last_status in terminal_states or last_status in active_states:
             send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
 
         last_update_time = time.time()
@@ -318,11 +319,14 @@ def monitor_printer(printer_config, stop_event):
                 data['remaining_time'] is None
             )
 
-            # Define terminal states that should trigger notifications
-            terminal_states = ['FINISH', 'FAILED', 'IDLE', 'PAUSE']
+            # Define true terminal states (print is done/inactive)
+            terminal_states = ['FINISH', 'FAILED', 'IDLE']
+
+            # PAUSE is an active state (print can resume), not terminal
+            active_states = ['RUNNING', 'PAUSE']
 
             # If we had partial data but now have complete data, send an update
-            if had_partial_data and not current_has_partial_data and current_status == 'RUNNING':
+            if had_partial_data and not current_has_partial_data and current_status in active_states:
                 print(f"[{get_timestamp()}] [{printer_name}] Received complete data")
                 print_status_info(data, printer_name)
                 send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
@@ -334,9 +338,16 @@ def monitor_printer(printer_config, stop_event):
 
             # Check if status changed
             elif current_status != last_status:
-                # Only send notification if transitioning TO a terminal state
+                # Send notification if:
+                # 1. Transitioning TO a terminal state (FINISH, FAILED, IDLE)
+                # 2. Transitioning TO or FROM PAUSE (pausing or resuming)
+                # 3. Transitioning FROM a terminal state to an active state (e.g., IDLE -> RUNNING)
                 # Skip PREPARE state entirely
-                if current_status in terminal_states:
+                transitioning_to_terminal = current_status in terminal_states
+                transitioning_to_from_pause = (current_status == 'PAUSE' or last_status == 'PAUSE')
+                transitioning_from_terminal_to_active = (last_status in terminal_states and current_status in active_states)
+
+                if transitioning_to_terminal or transitioning_to_from_pause or transitioning_from_terminal_to_active:
                     print_status_info(data, printer_name)
                     send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
                     last_update_time = current_time  # Reset update timer on state change
