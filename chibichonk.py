@@ -326,14 +326,24 @@ def monitor_printer(printer_config, stop_event):
             active_states = ['RUNNING', 'PAUSE']
 
             # If we had partial data but now have complete data, send an update
-            if had_partial_data and not current_has_partial_data and current_status in active_states:
-                print(f"[{get_timestamp()}] [{printer_name}] Received complete data")
+            # OR if we had partial data and now have at least progress/layer data (even if status still None)
+            has_progress_data = (data['progress'] is not None and
+                               data['current_layer'] is not None and
+                               data['remaining_time'] is not None)
+
+            if had_partial_data and (not current_has_partial_data or has_progress_data):
+                # Only update if we actually got some useful data
+                if not current_has_partial_data:
+                    print(f"[{get_timestamp()}] [{printer_name}] Received complete data")
+                elif has_progress_data and data['status'] is None:
+                    print(f"[{get_timestamp()}] [{printer_name}] Received progress data (status still pending)")
+
                 print_status_info(data, printer_name)
                 send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
                 last_update_time = current_time
                 if UPDATE_PERCENT_INTERVAL:
                     last_progress_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
-                had_partial_data = False  # Clear the flag
+                had_partial_data = current_has_partial_data  # Update flag (might still be partial if status is None)
                 last_status = current_status
 
             # Check if status changed
