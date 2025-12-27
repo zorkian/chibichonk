@@ -114,6 +114,15 @@ def send_discord_webhook(data, printer_name, ping_user_id=None, is_state_change=
 
     status = data['status']
 
+    # Infer RUNNING state if we have progress data but no status
+    # (for older printers that don't send status field immediately)
+    has_progress_data = (data['progress'] is not None and
+                        data['current_layer'] is not None and
+                        data['remaining_time'] is not None)
+
+    if status is None and has_progress_data:
+        status = 'RUNNING'  # Infer running state from progress data
+
     # Detect if we have partial data (missing key fields)
     has_partial_data = (
         status is None or
@@ -331,19 +340,15 @@ def monitor_printer(printer_config, stop_event):
                                data['current_layer'] is not None and
                                data['remaining_time'] is not None)
 
-            if had_partial_data and (not current_has_partial_data or has_progress_data):
-                # Only update if we actually got some useful data
-                if not current_has_partial_data:
-                    print(f"[{get_timestamp()}] [{printer_name}] Received complete data")
-                elif has_progress_data and data['status'] is None:
-                    print(f"[{get_timestamp()}] [{printer_name}] Received progress data (status still pending)")
-
+            # Only send this update once when transitioning from no progress to having progress
+            if had_partial_data and has_progress_data and last_progress == 0:
+                print(f"[{get_timestamp()}] [{printer_name}] Received progress data")
                 print_status_info(data, printer_name)
                 send_discord_webhook(data, printer_name, ping_user_id, is_state_change=True)
                 last_update_time = current_time
                 if UPDATE_PERCENT_INTERVAL:
                     last_progress_milestone = (current_progress // UPDATE_PERCENT_INTERVAL) * UPDATE_PERCENT_INTERVAL
-                had_partial_data = current_has_partial_data  # Update flag (might still be partial if status is None)
+                had_partial_data = False  # Clear flag once we've sent the first progress update
                 last_status = current_status
 
             # Check if status changed
